@@ -18,8 +18,16 @@ be able to access that website because it is not in your local dns database .
 
 ## Other information
 the install script will do all configurations needed and have an unistall option to revert everything
-the default phonebook directory will be /usr/local/share/dns-proxy/
-the main python script will be running in /usr/local/sbin/ folder
+the default 
+- phonebook directory will be /usr/local/share/dns-proxy/
+- the main python script will be running in /usr/local/sbin/ folder
+
+## Web Browser config (Firefox) Linux
+
+<img width="1010" height="749" alt="image" src="https://github.com/user-attachments/assets/464fe845-80eb-4727-8fb4-05eb13d5a9dd" />
+
+<img width="1010" height="749" alt="image" src="https://github.com/user-attachments/assets/fff2c5ca-0d1a-4620-a20f-97feb1f4149e" />
+
 
 ## 🚀 The Concept: "Accumulation vs Caching"
 Standard DNS servers forget IPs after the TTL (Time To Live) expires.  
@@ -76,11 +84,6 @@ Firefox (and some other browsers) bypass system DNS by default. You must disable
 
     Select Off (Use default DNS resolver).
 
-## Web Browser config (Firefox) Linux
-
-<img width="1010" height="749" alt="image" src="https://github.com/user-attachments/assets/464fe845-80eb-4727-8fb4-05eb13d5a9dd" />
-
-<img width="1010" height="749" alt="image" src="https://github.com/user-attachments/assets/fff2c5ca-0d1a-4620-a20f-97feb1f4149e" />
 
 
 If you do not do this, Firefox will ignore the proxy and your "Phone Book" will not grow.
