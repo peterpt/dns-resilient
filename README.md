@@ -12,6 +12,14 @@ be able to access that website because it is not in your local dns database .
 ## phonebook structure by this script
 <img width="1024" height="709" alt="image" src="https://github.com/user-attachments/assets/491b5d5d-f7e7-4842-8a04-b4dbfcb14a9e" />
 
+## Log file
+<img width="935" height="559" alt="image" src="https://github.com/user-attachments/assets/22cd7716-2585-4e43-9048-9fd0daaa73e3" />
+
+
+## Other information
+the install script will do all configurations needed and have an unistall option to revert everything
+the default phonebook directory will be /usr/local/share/dns-proxy/
+the main python script will be running in /usr/local/sbin/ folder
 
 ## 🚀 The Concept: "Accumulation vs Caching"
 Standard DNS servers forget IPs after the TTL (Time To Live) expires.  
