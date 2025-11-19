@@ -2,6 +2,7 @@
 # ------------------------------------------------------------------------------
 # Project: Resilient DNS Proxy (Internet Survival Kit)
 # Purpose: Self-healing, accumulating, local DNS proxy with health-checks.
+#          Now with Inbound Mail Harvesting (PTR/TXT/MX).
 #
 # Author:  peterpt
 # Co-Author: Google AI
@@ -12,12 +13,12 @@ import json
 import socket
 import threading
 import time
-from dnslib import DNSRecord, DNSHeader, RR, A, MX, QTYPE, RCODE
+from dnslib import DNSRecord, DNSHeader, RR, A, MX, TXT, PTR, QTYPE, RCODE
 from dnslib.server import DNSServer, BaseResolver
 import dns.resolver
+import dns.reversename
 
 # --- CONFIGURATION ---
-# The persistent storage location
 PHONE_BOOK_FILE = '/usr/local/share/dns-proxy/phone_book.json'
 UPSTREAM_DNS = '8.8.8.8'
 LOCAL_IP = '127.0.0.1'
@@ -26,7 +27,6 @@ TIMEOUT = 0.4
 # ---------------------
 
 class SilentLogger:
-    """Suppress all standard DNS log messages."""
     def log_pass(self, *args): pass
     def log_prefix(self, *args): pass
     def log_recv(self, *args): pass
@@ -58,25 +58,20 @@ class PhoneBook:
         with self.lock:
             existing = set(self.cache.get(key, []))
             incoming = set(new_data)
-            
-            # Calculate what is strictly NEW
             freshly_added = incoming - existing
             
             if not freshly_added:
                 return
 
-            # Merge old and new
             combined = list(existing | incoming)
             self.cache[key] = combined
             
-            # Save immediately
             try:
                 with open(self.filepath, 'w') as f:
                     json.dump(self.cache, f, indent=4)
             except Exception as e:
                 pass
             
-            # Print only new entries (Flush ensures it hits the log immediately)
             formatted = ", ".join([str(x) for x in freshly_added])
             print(f"{key} -> {formatted} - registered", flush=True)
 
@@ -87,19 +82,14 @@ class UniversalResolver(BaseResolver):
         self.upstream.nameservers = [UPSTREAM_DNS]
 
     def check_ip_health(self, ip):
-        """
-        Universal Heavy Duty Health Check.
-        Scans Web, Mail, Chat, and Admin ports.
-        """
-        # Phase 1: Web (Most common)
+        # Phase 1: Web
         if self.try_connect(ip, [443, 80]): return True
-        # Phase 2: Messaging (WhatsApp, XMPP, ICQ, IRC)
+        # Phase 2: Messaging
         if self.try_connect(ip, [5222, 5223, 5190, 6667, 6697]): return True
-        # Phase 3: Mail (SMTP, IMAP)
+        # Phase 3: Mail
         if self.try_connect(ip, [25, 465, 587, 993, 995]): return True
-        # Phase 4: Infrastructure (SSH, RDP, FTP, MQTT, DNS-TCP)
+        # Phase 4: Infrastructure
         if self.try_connect(ip, [22, 3389, 1883, 21, 53]): return True
-        
         return False
 
     def try_connect(self, ip, ports):
@@ -115,7 +105,6 @@ class UniversalResolver(BaseResolver):
         qname = str(request.q.qname)
         domain = qname.rstrip('.')
         qtype = request.q.qtype
-        
         reply = request.reply()
 
         # --- 1. BLOCK IPv6 (AAAA) ---
@@ -123,16 +112,14 @@ class UniversalResolver(BaseResolver):
             reply.header.rcode = RCODE.NOERROR
             return reply
 
-        # --- 2. HANDLE WEB BROWSING / HOSTNAMES (A Records) ---
+        # --- 2. HANDLE A RECORDS (Web/Hostnames) ---
         if qtype == QTYPE.A:
             valid_ips = []
             cached_ips = self.phone_book.get(domain)
-            
             if cached_ips:
                 for ip in cached_ips:
                     if self.check_ip_health(ip):
                         valid_ips.append(ip)
-            
             if not valid_ips:
                 try:
                     answers = self.upstream.resolve(domain, 'A')
@@ -142,18 +129,16 @@ class UniversalResolver(BaseResolver):
                         valid_ips = new_ips
                 except Exception:
                     pass
-            
             if valid_ips:
                 for ip in valid_ips:
                     reply.add_answer(RR(qname, QTYPE.A, rdata=A(ip), ttl=60))
             else:
                 reply.header.rcode = RCODE.SERVFAIL
 
-        # --- 3. HANDLE EMAIL (MX Records) ---
+        # --- 3. HANDLE MX RECORDS (Mail Routing) ---
         elif qtype == QTYPE.MX:
             key = f"MX:{domain}"
             cached_mx = self.phone_book.get(key)
-            
             if not cached_mx:
                 try:
                     answers = self.upstream.resolve(domain, 'MX')
@@ -163,7 +148,6 @@ class UniversalResolver(BaseResolver):
                         cached_mx = new_mx
                 except Exception:
                     pass
-
             if cached_mx:
                 for entry in cached_mx:
                     try:
@@ -173,7 +157,44 @@ class UniversalResolver(BaseResolver):
             else:
                 reply.header.rcode = RCODE.NOERROR
 
-        # --- 4. IGNORE OTHERS ---
+        # --- 4. HANDLE TXT RECORDS (SPF / Verification) ---
+        elif qtype == QTYPE.TXT:
+            key = f"TXT:{domain}"
+            cached_txt = self.phone_book.get(key)
+            if not cached_txt:
+                try:
+                    answers = self.upstream.resolve(domain, 'TXT')
+                    new_txt = [str(r)[1:-1] for r in answers]
+                    if new_txt:
+                        self.phone_book.update(key, new_txt)
+                        cached_txt = new_txt
+                except Exception:
+                    pass
+            if cached_txt:
+                for entry in cached_txt:
+                    reply.add_answer(RR(qname, QTYPE.TXT, rdata=TXT(entry), ttl=60))
+            else:
+                reply.header.rcode = RCODE.NOERROR
+
+        # --- 5. HANDLE PTR RECORDS (Reverse DNS - Vital for Incoming Mail) ---
+        elif qtype == QTYPE.PTR:
+            key = f"PTR:{domain}"
+            cached_ptr = self.phone_book.get(key)
+            if not cached_ptr:
+                try:
+                    answers = self.upstream.resolve(domain, 'PTR')
+                    new_ptr = [str(r) for r in answers]
+                    if new_ptr:
+                        self.phone_book.update(key, new_ptr)
+                        cached_ptr = new_ptr
+                except Exception:
+                    pass
+            if cached_ptr:
+                for entry in cached_ptr:
+                    reply.add_answer(RR(qname, QTYPE.PTR, rdata=PTR(entry), ttl=60))
+            else:
+                reply.header.rcode = RCODE.NOERROR
+
         else:
             reply.header.rcode = RCODE.NOERROR
 
@@ -182,11 +203,8 @@ class UniversalResolver(BaseResolver):
 if __name__ == '__main__':
     resolver = UniversalResolver()
     logger = SilentLogger()
-
     udp_server = DNSServer(resolver, port=PORT, address=LOCAL_IP, tcp=False, logger=logger)
-
-    print(f"[*] Resilient DNS (Web+Mail+Chat+Admin) running on {LOCAL_IP}:{PORT}", flush=True)
-
+    print(f"[*] Resilient DNS (Universal + Harvester) running on {LOCAL_IP}:{PORT}", flush=True)
     try:
         udp_server.start_thread()
         while True:
