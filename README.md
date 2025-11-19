@@ -36,8 +36,8 @@ If the DNS system crashes or an IP range goes down, your computer simply switche
 
 **1. Clone the repository:**
 ```bash
-git clone https://github.com/peterpt/resilient-dns-proxy.git
-cd resilient-dns-proxy
+git clone https://github.com/peterpt/dns-resilient.git
+cd dns-resilient
 
   
 
