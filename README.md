@@ -129,6 +129,15 @@ tail -f /var/log/resilient-dns.log
 **Maintained by peterpt**  
 *Developed with the assistance of Google AI*
 
+## Last notes
+
+Best way would be installing this script on your home router , in case openwrt
+However it will require python3 installed witch means that your openwrt router
+must have an sdcard slot to install the aditional packages needed to make this work
+, this way all your devices connected to that router would not need this script installed
+ but this is a long shot that i will test in future and import current phonebook to openwrt
+to see if it works perfectly .
+
  📜 License
 
 MIT License - Free to use, modify, and distribute.
